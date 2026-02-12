@@ -1,10 +1,11 @@
-use std::{collections::BTreeMap, vec};
+use std::{collections::BTreeMap, u16, vec};
 
 use bevy_asset::LoadContext;
 use bevy_platform::collections::HashMap;
-use draco_decoder::{AttributeDataType, DracoDecodeConfig, decode_mesh_with_config_sync};
+use draco_decoder::{DracoDecodeConfig, MeshAttribute, decode_mesh_with_config_sync};
 use gltf::{
     Document, Gltf, Primitive, Semantic,
+    accessor::{DataType, Dimensions},
     json::validation::{
         Checked::{self, Valid},
         USize64,
@@ -75,6 +76,37 @@ impl DracoSemanticLink {
     }
 }
 
+pub trait GltfDataType {
+    fn component_data_type(&self) -> DataType;
+}
+
+impl GltfDataType for DracoDecodeConfig {
+    fn component_data_type(&self) -> DataType {
+        if self.index_count() > u16::MAX as u32 {
+            DataType::U32
+        } else {
+            DataType::U16
+        }
+    }
+}
+
+impl GltfDataType for MeshAttribute {
+    fn component_data_type(&self) -> DataType {
+        match self.data_type() {
+            draco_decoder::AttributeDataType::Int8 => DataType::I8,
+            draco_decoder::AttributeDataType::UInt8 => DataType::U8,
+            draco_decoder::AttributeDataType::Int16 => DataType::I16,
+            draco_decoder::AttributeDataType::UInt16 => DataType::U16,
+            draco_decoder::AttributeDataType::Int32 => {
+                warn!("unspport i32 to u32");
+                DataType::U32
+            }
+            draco_decoder::AttributeDataType::UInt32 => DataType::U32,
+            draco_decoder::AttributeDataType::Float32 => DataType::F32,
+        }
+    }
+}
+
 pub(crate) struct DracoExtension {
     pub(crate) link: DracoSemanticLink,
 }
@@ -129,23 +161,16 @@ impl DracoExtension {
             target: Some(Valid(gltf::json::buffer::Target::ArrayBuffer)),
         });
 
-        // fix when index below u32
-        let indices = primitive.indices().unwrap();
-        let data_type = match (indices.data_type(), indices.count()) {
-            (gltf::accessor::DataType::U16, count) if count > u16::MAX as usize => {
-                gltf::accessor::DataType::U32
-            }
-            (data_type, _) => data_type,
-        };
+        let data_type = decode_config.component_data_type();
 
         let indices_accessor = root.push(gltf::json::Accessor {
             buffer_view: Some(indices_index),
             byte_offset: None,
-            count: USize64::from(primitive.indices().unwrap().count()),
+            count: USize64::from(decode_config.index_count() as usize),
             component_type: Valid(gltf::json::accessor::GenericComponentType(data_type)),
             extensions: Default::default(),
             extras: Default::default(),
-            type_: Valid(primitive.indices().unwrap().dimensions()),
+            type_: Valid(Dimensions::Scalar),
             min: None,
             max: None,
             name: None,
@@ -172,9 +197,9 @@ impl DracoExtension {
             let attr_index = root.push(gltf::json::Accessor {
                 buffer_view: Some(view_index),
                 byte_offset: None,
-                count: USize64::from(old_attr.count()),
+                count: USize64::from(decode_config.vertex_count() as usize),
                 component_type: Valid(gltf::json::accessor::GenericComponentType(
-                    old_attr.data_type(),
+                    mesh_attribute.component_data_type(),
                 )),
                 extensions: Default::default(),
                 extras: Default::default(),

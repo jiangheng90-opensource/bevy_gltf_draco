@@ -69,7 +69,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     commands
         .spawn(SceneRoot(asset_server.load_with_settings(
-            GltfAssetLabel::Scene(0).from_asset("models/DracoCompressed/CesiumMilkTruck.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/CesiumMan/CesiumMan.gltf"),
             |s: &mut GltfLoaderSettings| {
                 s.gltf_without_validation = true;
             },

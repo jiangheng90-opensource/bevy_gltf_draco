@@ -2304,9 +2304,9 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "draco_decoder"
-version = "0.0.20"
+version = "0.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2567bef1c2444bb02947de4c0433fe7d97f0c199693adb1af94615ccf6966746"
+checksum = "e74964892ccdb8527a18d153f275e7cf98e26a66ddf276094b593305e78f2d38"
 dependencies = [
  "base64 0.21.7",
  "bytemuck",
