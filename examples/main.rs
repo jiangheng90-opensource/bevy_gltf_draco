@@ -71,7 +71,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         .spawn(SceneRoot(asset_server.load_with_settings(
             GltfAssetLabel::Scene(0).from_asset("models/CesiumMan/CesiumMan.gltf"),
             |s: &mut GltfLoaderSettings| {
-                s.gltf_without_validation = true;
+                s.validate = false;
             },
         )))
         .observe(play_animation_when_ready);
