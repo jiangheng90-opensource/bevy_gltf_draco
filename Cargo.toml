@@ -29,7 +29,7 @@ gltf = { version = "1.4.0", default-features = false, features = [
     "names",
     "utils",
 ] }
-draco_decoder = { version = "0.0.23" }
+draco_decoder = { version = "0.0.25" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.140"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
