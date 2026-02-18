@@ -239,7 +239,7 @@ impl DracoExtension {
     pub fn decode_mesh(
         &self,
         gltf: &Gltf,
-        buffer_data: &Vec<Vec<u8>>,
+        buffer_data: &[Vec<u8>],
     ) -> Option<(DracoDecodeConfig, Vec<Vec<u8>>)> {
         let view = gltf.views().nth(self.link.buffer_view).unwrap();
         let draco_encode_slice: &[u8] =

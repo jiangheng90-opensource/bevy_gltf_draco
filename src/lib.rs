@@ -24,7 +24,7 @@ impl GltfExtensionHandler for GltfDracoDecoderExtensionHandler {
         load_context: &mut LoadContext<'_>,
         gltf_json: &JsonGltf,
         gltf_primitive: &Primitive,
-        buffer_data: &Vec<Vec<u8>>,
+        buffer_data: &[Vec<u8>],
         out_doc: &mut Option<Document>,
         out_data: &mut Option<Vec<Vec<u8>>>,
     ) {
