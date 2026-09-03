@@ -68,14 +68,22 @@ impl GltfExtensionHandler for GltfDracoDecoderExtensionHandler {
         };
         let Some((config, decode_data)) = draco_extension.decode_mesh(gltf, buffer_data).await
         else {
-            error!("fail to make draco mesh");
+            error!(
+                "failed to decode draco mesh (mesh {}, primitive {})",
+                gltf_mesh.index(),
+                gltf_primitive.index()
+            );
             return;
         };
 
         let Some(draco_primitive_document) =
             draco_extension.build_document(gltf_primitive, &config)
         else {
-            error!("fail to build draco primitive");
+            error!(
+                "failed to build draco primitive (mesh {}, primitive {})",
+                gltf_mesh.index(),
+                gltf_primitive.index()
+            );
             return;
         };
 
