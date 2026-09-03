@@ -28,8 +28,6 @@ wasm-bindgen-futures = "0.4"
 
 ## Bevy Version Support
 
-We intend to track the latest Bevy release. PRs supporting this are welcome!
-
 | bevy | bevy_gltf_draco |
 | ---- | --------------- |
 | 0.19 | 0.1, 0.2        |
