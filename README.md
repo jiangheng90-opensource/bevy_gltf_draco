@@ -16,7 +16,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-bevy_gltf_draco = "0.1"
+bevy_gltf_draco = "0.2"
 ```
 
 For WASM support, ensure you have the following dependencies:
@@ -25,6 +25,14 @@ For WASM support, ensure you have the following dependencies:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
 ```
+
+## Bevy Version Support
+
+We intend to track the latest Bevy release. PRs supporting this are welcome!
+
+| bevy | bevy_gltf_draco |
+| ---- | --------------- |
+| 0.19 | 0.1, 0.2        |
 
 ## Quick Start
 
