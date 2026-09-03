@@ -13,7 +13,7 @@ use gltf::{
 };
 use serde::Deserialize;
 use std::{collections::BTreeMap, vec};
-use tracing::warn;
+use tracing::{error, warn};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
@@ -138,6 +138,7 @@ impl DracoExtension {
         let Ok(value): Result<DracoExtensionValue, serde_json::Error> =
             serde_json::from_str(&json_value.to_string())
         else {
+            error!("failed to parse KHR_draco_mesh_compression extension");
             return None;
         };
 

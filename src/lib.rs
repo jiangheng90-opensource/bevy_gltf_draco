@@ -62,7 +62,8 @@ impl GltfExtensionHandler for GltfDracoDecoderExtensionHandler {
     ) {
         let Some(draco_extension) = DracoExtension::parse(load_context, gltf, gltf_primitive)
         else {
-            error!("fail to make draco_extension");
+            // This primitive does not use KHR_draco_mesh_compression; let the
+            // default loader handle it.
             return;
         };
         let Some((config, decode_data)) = draco_extension.decode_mesh(gltf, buffer_data).await
