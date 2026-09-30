@@ -5,7 +5,7 @@ A Bevy plugin that provides Draco mesh compression support for glTF loader. This
 ## Features
 
 - Decode Draco-compressed glTF meshes at runtime
-- Support for both native and WASM platforms
+- Pure Rust decoder ([draco-gltf](https://crates.io/crates/draco-gltf)): the same code on native and WASM, no C++ toolchain and no JavaScript decoder
 - Seamless integration with Bevy's glTF loader
 - Support for all standard mesh attributes (positions, normals, texture coordinates, joints, weights, etc.)
 - Morph target support for Draco-compressed meshes
@@ -19,12 +19,7 @@ Add this to your `Cargo.toml`:
 bevy_gltf_draco = "0.2"
 ```
 
-For WASM support, ensure you have the following dependencies:
-
-```toml
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4"
-```
+No extra dependencies are needed for WASM.
 
 ## Bevy Version Support
 
@@ -57,13 +52,13 @@ Load your glTF models with validation disabled (required for Draco-compressed mo
 
 ```rust
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(SceneRoot(
-        asset_server.load_with_settings(
-            GltfAssetLabel::Scene(0).from_asset("models/your_model.gltf"),
-            |s: &mut GltfLoaderSettings| {
-                s.validate = false;  // Required: gltf-rs cannot validate KHR_draco_mesh_compression
-            },
-        )
+    commands.spawn(WorldAssetRoot(
+        asset_server
+            .load_builder()
+            .with_settings(|s: &mut GltfLoaderSettings| {
+                s.validate = false; // Required when the file lists KHR_draco_mesh_compression in extensionsRequired
+            })
+            .load(GltfAssetLabel::Scene(0).from_asset("models/your_model.gltf")),
     ));
 }
 ```
@@ -99,21 +94,12 @@ Then open browser: http://localhost:3000
 
 ## Platform-Specific Notes
 
-### Native (Desktop)
+Decoding is synchronous Rust on every target, inside the glTF loader's
+primitive hook. On WASM there is no JavaScript decoder to load, no worker and
+no copy of the Draco data.
 
-The decoder runs directly in the async context with zero-copy data handling where possible.
-
-### WebAssembly (WASM)
-
-Due to JavaScript/WASM interop constraints, the plugin uses a channel-based delegation pattern:
-
-1. Draco data is copied to satisfy `'static` lifetime requirements
-2. Decoding runs via `spawn_local` to handle non-`Send` JS/WASM objects
-3. Results are returned through a channel
-
-This architecture is necessary because:
-- JS interop types (like `Uint8Array`) contain raw pointers that don't implement `Send + Sync`
-- `wasm_bindgen_futures` uses `Rc<RefCell>` internally
+A primitive whose Draco data fails to decode loads as an empty mesh, with an
+error in the log; the rest of the file still loads.
 
 ## Supported Mesh Attributes
 
@@ -130,17 +116,17 @@ The decoder supports the following glTF semantic attributes:
 | WEIGHTS_n | Joint weights for skeletal animation (set n) |
 | _CUSTOM | Custom attributes (prefixed with underscore) |
 
+Attributes the extension does not compress are read from their ordinary
+accessors, as the extension requires. Morph targets are never compressed and
+index the decoded vertices in order: an encoder has to keep vertex order for
+them (sequential encoding does), and targets whose count does not match the
+decoded vertices are dropped with a warning.
+
 ## Supported Data Types
 
-| Draco DataType | Rust Type |
-|---------------|-----------|
-| DT_INT8 | i8 |
-| DT_UINT8 | u8 |
-| DT_INT16 | i16 |
-| DT_UINT16 | u16 |
-| DT_INT32 | i32 |
-| DT_UINT32 | u32 |
-| DT_FLOAT32 | f32 |
+The glTF 2.0 component types: `BYTE` (i8), `UNSIGNED_BYTE` (u8), `SHORT` (i16),
+`UNSIGNED_SHORT` (u16), `UNSIGNED_INT` (u32) and `FLOAT` (f32). An accessor's
+`normalized` flag is honoured.
 
 ## Advanced Usage
 
@@ -161,85 +147,63 @@ App::new()
 
 ### Validation Settings (Required)
 
-**Important**: Draco-compressed glTF models cannot pass `gltf-rs` validation. You **must** disable validation when loading:
+**Important**: `gltf-rs` rejects any file that lists an extension it does not
+implement in `extensionsRequired`, before this plugin sees the file. Draco-only
+files list `KHR_draco_mesh_compression` there, so validation must be disabled
+when loading them:
 
 ```rust
 use bevy::gltf::GltfLoaderSettings;
 
-commands.spawn(SceneRoot(
-    asset_server.load_with_settings(
-        GltfAssetLabel::Scene(0).from_asset("models/model.gltf"),
-        |s: &mut GltfLoaderSettings| {
-            s.validate = false;  // Required for KHR_draco_mesh_compression
-        },
-    )
+commands.spawn(WorldAssetRoot(
+    asset_server
+        .load_builder()
+        .with_settings(|s: &mut GltfLoaderSettings| {
+            s.validate = false; // Required for KHR_draco_mesh_compression
+        })
+        .load(GltfAssetLabel::Scene(0).from_asset("models/model.gltf")),
 ));
 ```
 
 ## How It Works
 
-### Extension Handler
-
-The plugin implements the `GltfExtensionHandler` trait and hooks into `on_gltf_primitive`:
-
-```rust
-#[async_trait::async_trait]
-impl GltfExtensionHandler for GltfDracoDecoderExtensionHandler {
-    async fn on_gltf_primitive(
-        &mut self,
-        load_context: &mut LoadContext<'_>,
-        gltf: &JsonGltf,
-        gltf_mesh: &gltf::Mesh<'_>,
-        gltf_primitive: &Primitive<'_>,
-        buffer_data: &[Vec<u8>],
-        custom_vertex_attributes: &HashMap<Box<str>, MeshVertexAttribute>,
-        gltf_mesh_on_skinned_nodes: bool,
-        gltf_mesh_on_non_skinned_nodes: bool,
-        user_mesh: &mut Option<Mesh>,
-    ) {
-        // 1. Parse KHR_draco_mesh_compression extension from the primitive
-        // 2. Decode the Draco-encoded buffer via draco_decoder
-        // 3. Build a temporary glTF document describing the decoded data
-        // 4. Convert attributes and indices into a Bevy Mesh
-        // 5. Populate user_mesh so Bevy's glTF loader uses the decoded result
-    }
-}
-```
-
-### Decoding Pipeline
+The plugin implements Bevy's `GltfExtensionHandler` and hooks into
+`on_gltf_primitive`:
 
 ```
 glTF Primitive with KHR_draco_mesh_compression
                     ↓
-        Extract buffer view reference
+        Parse the extension, slice its buffer view
                     ↓
-        Read encoded Draco data
+        Decode with draco-gltf, checked against the primitive's accessors
                     ↓
-        Decode mesh via draco_decoder
+        Describe the decoded attributes as a one-buffer glTF document
                     ↓
-        Build temporary glTF document structure
+        Convert them with Bevy's own convert_attribute; add indices,
+        uncompressed attributes and morph targets from the original primitive
                     ↓
-        Convert attributes, indices and morph targets
-                    ↓
-        Populate Bevy Mesh returned to the glTF loader
+        Populate the Bevy Mesh returned to the glTF loader
 ```
+
+Letting Bevy convert the attributes keeps semantic mapping, normalized
+integers, custom attributes and coordinate conversion identical to
+uncompressed meshes.
 
 ## Troubleshooting
 
 ### Model Not Rendering
 
-1. Ensure the plugin is added **before** loading models
+1. Ensure the plugin is added (before or after `GltfPlugin`, either works)
 2. Check that your glTF file uses `KHR_draco_mesh_compression` extension
 3. Verify the model loads correctly in other glTF viewers
 
 ### WASM Build Errors
 
 - Ensure `wasm-bindgen` CLI version matches the crate version
-- Add required WASM dependencies to `Cargo.toml`
 
 ### Attribute Type Mismatches
 
-The decoder automatically maps Draco data types to glTF component types. If you see unexpected type conversions, check the original glTF's attribute definitions.
+Each decoded attribute is read as its glTF accessor declares it. If you see unexpected type conversions, check the original glTF's attribute definitions.
 
 ## License
 
