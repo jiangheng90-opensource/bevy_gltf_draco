@@ -31,14 +31,11 @@ gltf = { version = "1.4.0", default-features = false, features = [
     "names",
     "utils",
 ] }
-draco_decoder = { version = "0.0.29" }
-serde = { version = "1.0", features = ["derive"] }
+# Pure Rust decoder, the same on native and wasm targets.
+draco-gltf = { version = "0.5", default-features = false, features = ["draco-decode"] }
 serde_json = "1.0.140"
+thiserror = "2"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
-futures = "0.3"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4"
 
 [dev-dependencies]
 bevy = { version = "0.19.0", features = ["jpeg", "bevy_animation"] }
