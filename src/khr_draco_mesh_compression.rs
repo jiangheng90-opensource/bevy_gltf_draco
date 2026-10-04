@@ -219,7 +219,10 @@ impl DracoExtension {
                 min: Some(gltf::json::Value::from(old_attr.min())),
                 max: Some(gltf::json::Value::from(old_attr.max())),
                 name: None,
-                normalized: false,
+                // A normalized integer attribute -- a `u8` or `u16` colour, a
+                // quantized texture coordinate -- decodes to the same integers
+                // and has to keep the flag, or it is read as raw values.
+                normalized: old_attr.normalized(),
                 sparse: None,
             });
             map.insert(Valid(semantic.clone()), attr_index);
