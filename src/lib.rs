@@ -139,11 +139,31 @@ impl GltfExtensionHandler for GltfDracoDecoderExtensionHandler {
             });
         };
 
-        {
-            let morph_target_reader = reader.read_morph_targets();
-            if morph_target_reader.len() != 0 {
+        // Morph targets are not compressed: they are the original primitive's
+        // ordinary accessors, indexing the vertices in the order the encoder
+        // wrote them. A stream that decodes to another vertex count has not kept
+        // that order, and applying them anyway would move the wrong vertices.
+        let vertex_count = config.vertex_count() as usize;
+        let targets = gltf_primitive.morph_targets();
+        if targets.len() != 0 {
+            let mismatch = targets
+                .flat_map(|target| [target.positions(), target.normals(), target.tangents()])
+                .flatten()
+                .find(|accessor| accessor.count() != vertex_count);
+            if let Some(accessor) = mismatch {
+                warn!(
+                    "{}: dropping morph targets: accessor {} has {} values and the Draco stream decoded {} vertices",
+                    primitive_label,
+                    accessor.index(),
+                    accessor.count(),
+                    vertex_count
+                );
+            } else {
+                let original = gltf_primitive
+                    .reader(|buffer| buffer_data.get(buffer.index()).map(Vec::as_slice));
                 mesh.set_morph_targets(
-                    morph_target_reader
+                    original
+                        .read_morph_targets()
                         .flat_map(|i| PrimitiveMorphAttributesIter {
                             convert_coordinates: self.rotate_meshes,
                             positions: i.0,
