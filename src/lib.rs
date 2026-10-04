@@ -4,7 +4,7 @@ use bevy::gltf::extensions::GltfExtensionHandlers;
 use bevy::gltf::gltf_ext::mesh::primitive_topology;
 use bevy::gltf::vertex_attributes::convert_attribute;
 use bevy::gltf::{
-    GltfAssetLabel, GltfLoaderSettings, MorphTargetNames, PrimitiveMorphAttributesIter,
+    GltfAssetLabel, GltfLoaderSettings, GltfPlugin, MorphTargetNames, PrimitiveMorphAttributesIter,
 };
 use bevy::mesh::MeshVertexAttribute;
 use bevy::{
@@ -33,6 +33,9 @@ mod khr_draco_mesh_compression;
 struct GltfDracoDecoderExtensionHandler {
     load_meshes: RenderAssetUsages,
     rotate_meshes: bool,
+    /// `GltfPlugin::convert_coordinates`, which a load falls back to when its
+    /// settings leave `convert_coordinates` unset, as Bevy's loader does.
+    default_rotate_meshes: bool,
 }
 
 impl GltfExtensionHandler for GltfDracoDecoderExtensionHandler {
@@ -42,10 +45,9 @@ impl GltfExtensionHandler for GltfDracoDecoderExtensionHandler {
 
     fn on_root(&mut self, _: &mut LoadContext<'_>, _: &gltf::Gltf, settings: &GltfLoaderSettings) {
         self.load_meshes = settings.load_meshes;
-        self.rotate_meshes = match settings.convert_coordinates {
-            Some(cc) => cc.rotate_meshes,
-            None => false,
-        }
+        self.rotate_meshes = settings
+            .convert_coordinates
+            .map_or(self.default_rotate_meshes, |cc| cc.rotate_meshes);
     }
 
     async fn on_gltf_primitive(
@@ -186,6 +188,22 @@ pub struct GltfDracoDecoderPlugin;
 
 impl Plugin for GltfDracoDecoderPlugin {
     fn build(&self, app: &mut App) {
+        // Created here as well, so the plugin can be added before `GltfPlugin`:
+        // both only initialize it, and the loader takes the shared list in
+        // `GltfPlugin::finish`.
+        app.init_resource::<GltfExtensionHandlers>();
+    }
+
+    fn finish(&self, app: &mut App) {
+        // Every plugin has been added by now, so `GltfPlugin`'s coordinate
+        // default can be read whichever order the two were added in.
+        let handler = GltfDracoDecoderExtensionHandler {
+            default_rotate_meshes: app
+                .get_added_plugins::<GltfPlugin>()
+                .first()
+                .is_some_and(|gltf| gltf.convert_coordinates.rotate_meshes),
+            ..Default::default()
+        };
         #[cfg(target_family = "wasm")]
         bevy::tasks::block_on(async {
             app.world_mut()
@@ -193,13 +211,13 @@ impl Plugin for GltfDracoDecoderPlugin {
                 .0
                 .write()
                 .await
-                .push(Box::new(GltfDracoDecoderExtensionHandler::default()))
+                .push(Box::new(handler))
         });
         #[cfg(not(target_family = "wasm"))]
         app.world_mut()
             .resource_mut::<GltfExtensionHandlers>()
             .0
             .write_blocking()
-            .push(Box::new(GltfDracoDecoderExtensionHandler::default()));
+            .push(Box::new(handler));
     }
 }
